@@ -11,22 +11,25 @@
 
 using namespace std;
 
-class ThreadModel {
+class ThreadModel
+{
 public:
     ThreadModel();
     virtual ~ThreadModel();
     virtual int ThreadLoop() = 0;
-    void run() {}
-    pthread_t getId() { return mThreadId; }
+    int run();
+    int join();
+    pthread_t getId()
+    {
+        return mThreadId;
+    }
 private:
     static void *_threadLoop(void *private_data);
     pthread_t mThreadId;
+    ThreadModel *mHoldSelf;
 };
 ThreadModel::ThreadModel() : mThreadId(0)
 {
-    int err = pthread_create(&mThreadId, NULL, ThreadModel::_threadLoop, this);
-    if (err)
-        throw new runtime_error("create thread fail");
 }
 ThreadModel::~ThreadModel()
 {
@@ -34,10 +37,26 @@ ThreadModel::~ThreadModel()
     if (mThreadId)
         pthread_join(mThreadId, &ret);
 }
+int ThreadModel::run()
+{
+    mHoldSelf = this;
+    cout << "mHoldSelf = " << this << endl;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    int err = pthread_create(&mThreadId, NULL, _threadLoop, this);
+    pthread_attr_destroy(&attr);
+    return err;
+}
+int ThreadModel::join()
+{
+    int ret = pthread_join(mThreadId, NULL);
+    return ret;
+}
 void *ThreadModel::_threadLoop(void *private_data)
 {
     int ret;
-    ThreadModel *_this = (ThreadModel *)private_data;
+    ThreadModel* const _this = (ThreadModel *)private_data;
     while (true)
     {
         ret = _this->ThreadLoop();
@@ -48,23 +67,28 @@ void *ThreadModel::_threadLoop(void *private_data)
 class ThreadModelTest : public ThreadModel
 {
 public:
-    ThreadModelTest() : ThreadModel(), dummy(5) {}
+    ThreadModelTest() : dummy(5) {}
     virtual ~ThreadModelTest() {}
-    virtual int ThreadLoop()
-    {
-        dummy = 50;
-        cout << "dummy = " << dummy << endl;
-        return 1;
-    }
+    virtual int ThreadLoop();
 private:
     int dummy;
 };
+int ThreadModelTest::ThreadLoop()
+{
+    //dummy = 50;
+    cout << "dummy = " << dummy << endl;
+    return 1;
+}
 int main()
 {
     try
     {
-        ThreadModelTest tt;
-    } catch (exception ex)
+        ThreadModelTest *pt = new ThreadModelTest();
+        pt->run();
+        pt->join();
+        delete pt;
+    }
+    catch (exception ex)
     {
         cout << "create ThreadModelTest fail" << endl;
         return -1;
