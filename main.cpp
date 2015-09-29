@@ -8,6 +8,10 @@
 
 #include <pthread.h>
 #include <stdexcept>
+#include <AutoLock.h>
+
+#include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -40,7 +44,7 @@ ThreadModel::~ThreadModel()
 int ThreadModel::run()
 {
     mHoldSelf = this;
-    cout << "mHoldSelf = " << this << endl;
+    //cout << "mHoldSelf = " << this << endl;
     pthread_attr_t attr;
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
@@ -63,35 +67,44 @@ void *ThreadModel::_threadLoop(void *private_data)
         if (ret)
             break;
     }
+    return NULL;
 }
+
+int myCnt = 0;
+Mutex cnt_lock;
+
 class ThreadModelTest : public ThreadModel
 {
 public:
-    ThreadModelTest() : dummy(5) {}
+    ThreadModelTest() {}
     virtual ~ThreadModelTest() {}
     virtual int ThreadLoop();
-private:
-    int dummy;
 };
 int ThreadModelTest::ThreadLoop()
 {
     //dummy = 50;
-    cout << "dummy = " << dummy << endl;
+    AutoMutex lock(cnt_lock);
+    myCnt++;
+    cout << "Thread " << getId() << ": count = " << myCnt << endl;
     return 1;
 }
+
 int main()
 {
-    try
+    vector<ThreadModel*> ths;
+    for (int i = 0; i < 100; i++)
     {
-        ThreadModelTest *pt = new ThreadModelTest();
-        pt->run();
-        pt->join();
-        delete pt;
+        ThreadModel *th = new ThreadModelTest();
+        ths.push_back(th);
     }
-    catch (exception ex)
+    for (vector<ThreadModel*>::iterator it = ths.begin(); it != ths.end(); it++)
     {
-        cout << "create ThreadModelTest fail" << endl;
-        return -1;
+        ThreadModel *th = *it;
+        th->run();
     }
-    return 0;
+    for(auto th : ths)
+    {
+        th->join();
+        delete th;
+    }
 }
